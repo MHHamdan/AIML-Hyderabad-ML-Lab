@@ -1,0 +1,477 @@
+---
+title: "Jayanth Rasamsetti"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+# Load the required libraries
+```{r}
+library(data.table)
+library(caret)
+library(DMwR)
+install.packages("forecast")
+install.packages("zoo")
+library(zoo)
+library(forecast)
+library(lubridate)
+library(DataCombine)
+library(imputeTS)
+library(plyr)
+library(dplyr)
+library(TTR)
+library(graphics)
+library(data.table)
+library(Quandl)
+library(DMwR)
+```
+# Set the working directory
+```{r}
+rm(list = ls(all=TRUE))
+gc()
+getwd()
+path = "/Users/Apple/Desktop/PhD"
+setwd(path)
+```
+# Read train data
+```{r}
+train0 <- fread("Train.csv")
+train <- fread("Train.csv") # 252 obs of 4 variables
+sample<-fread("template.csv")
+train3<-fread("train_men1.csv")
+
+train_men1 <- fread("train_men1.csv")
+train_women1 <- fread("train_women1.csv")
+train_other1 <- fread("train_other1.csv")
+```
+# Get the structure and summary of each class
+```{r}
+summary(train)
+train$ProductCategory<-as.factor(train$ProductCategory)
+train$Year<-as.factor(train$Year)
+train$Month<-as.factor(train$Month)
+```
+# Missing Values
+```{r}
+# There should be 84*3 = 252 records, and there are 252 observations. 
+# There are no missing values or records missing in Year, Month
+
+sum(is.na(train))
+# There are 13 missing values in Sales
+```
+# Impute the missing values
+```{r}
+# Use na.locf (succeeding or preceeding value)
+summary(train)
+
+train_men <- train[train$ProductCategory == "MenClothing",]
+train_women <- train[train$ProductCategory == "WomenClothing",]
+train_other <- train[train$ProductCategory == "OtherClothing",]
+
+write.csv(x = train_men, file = "train_men.csv", sep = ",", row.names = FALSE)
+write.csv(x = train_women, file = "train_women.csv", sep = ",", row.names = FALSE)
+write.csv(x = train_other, file = "train_other.csv", sep = ",", row.names = FALSE)
+
+train_men$`Sales(In ThousandDollars)` <- na.locf(train_men$`Sales(In ThousandDollars)`)
+train_women$`Sales(In ThousandDollars)` <- na.locf(train_women$`Sales(In ThousandDollars)`)
+train_other$`Sales(In ThousandDollars)` <- na.locf(train_other$`Sales(In ThousandDollars)`)
+
+#OR
+#Impute the median for the missing values by month
+#Men
+summary(train_men[train_men$Month == 6,])
+medianAttM6 <- 690.0
+
+summary(train_men[train_men$Month == 8,])
+medianAttM8<-687.0
+
+summary(train_men[train_men$Month == 9,])
+medianAttM9<-662.0
+#Women
+summary(train_women[train_women$Month == 4,])
+medianAttW4 <- 3724.0
+
+summary(train_women[train_women$Month == 10,])
+medianAttW10<-3245.0
+
+summary(train_women[train_women$Month == 9,])
+medianAttW9<-3451.0
+#Other
+summary(train_other[train_other$Month == 2,])
+medianAttO2 <- 1000.5
+
+summary(train_other[train_other$Month == 4,])
+medianAttO4<-1162.0
+
+summary(train_other[train_other$Month == 6,])
+medianAttO6<-1205.0
+
+summary(train_other[train_other$Month == 10,])
+medianAttO10<-1086.5
+
+train_men[is.na(train_men$`Sales(In ThousandDollars)`,"medianAttM6)]
+train_men[is.na(train_men$Attr11),"Attr11"]<-medianAtt11
+train_omit[is.na(train_omit$Attr12),"Attr12"]<-medianAtt12
+
+#Impute the mean for the missing values by month
+```
+# Convert this to a Time Series
+```{r}
+#Aggregate the month & year into one number
+sales_men <- ts(train_men$`Sales(In ThousandDollars)`, frequency =12)
+sales_women <- ts(train_women$`Sales(In ThousandDollars)`, frequency =12)
+sales_other <- ts(train_other$`Sales(In ThousandDollars)`, frequency =12)
+
+sales_men1<- ts(train_men1$`Sales(In ThousandDollars)`, frequency =12)
+sales_women1 <- ts(train_women1$`Sales(In ThousandDollars)`, frequency =12)
+sales_other1 <- ts(train_other1$`Sales(In ThousandDollars)`, frequency =12)
+```
+
+```{r}
+boxplot(sales_men, col = c("red"))
+boxplot(sales_women, col = c("blue"))
+boxplot(sales_other, col = c("green"))
+A <- sales_men
+B <- sales_women
+C <- sales_other
+mydf <- data.frame(y=c(A,B,C),x=c(rep(1,length(A)),rep(2,length(B)),rep(3,length(C))))
+mydf <- data.frame(y=c(A,C),x=c(rep(1,length(A)),rep(2,length(C))))
+with(mydf, boxplot(y~x, col=c("red",'blue', "yellow")))
+
+boxplot(mpg~cyl, data=sales_men, main= toupper("Fuel Consumption"), font.main=3, cex.main=1.2, col=c("red","blue", "yellow"), xlab="Number of Cylinders", ylab="Miles per Gallon", font.lab=3, notch=TRUE, range = 0)
+```
+
+# Visualize the time series data
+```{r}
+#Men
+plot(sales_men,type="l",lwd=3,col="red",xlab="year",ylab="Sales",main="Time series plot Sales-men")
+```
+# Visualize the time series data
+```{r}
+# Women
+plot(sales_women,type="l",lwd=3,col="blue",xlab="year",ylab="Sales",main="Time series plot Sales-women")
+```
+# Visualize the time series data
+```{r}
+# Other
+plot(sales_other,type="l",lwd=3,col="green",xlab="year",ylab="Sales",main="Time series plot Sales-other")
+```
+#Split the Data
+```{r}
+TrainMen <- train_men[1:(nrow(train_men) - 4),]
+ValMen <- train_men[(nrow(train_men) - 3):nrow(train_men),]
+```
+
+# Decomposed Time Series
+# Decompose will provide us with the info on seasonality,trend and randomness
+```{r}
+# Decompose Men
+SalesDecomposed=decompose(sales_men)
+plot(SalesDecomposed,col="Red")
+```
+```{r}
+# Decompose Women
+SalesDecomposed_women=decompose(sales_women)
+plot(SalesDecomposed_women,col="Blue")
+```
+```{r}
+# Decompose Other
+SalesDecomposed_other=decompose(sales_other)
+plot(SalesDecomposed_women,col="Green")
+```
+
+# ACF,PACF
+```{r}
+par(mfrow=c(2,2))
+acf(train_men,lag=30)
+pacf(train_men,lag=30)
+
+train_men1 <- ts(TrainMen$`Sales(In ThousandDollars)`, frequency =1)
+acf(train_men1,lag=10)
+```
+
+```{r}
+pacf(train_men1,lag=10)
+```
+
+```{r}
+par(mfrow=c(2,3))
+plot(diff(train_men1,lag = 1),type="l"); acf(diff(train_men1,lag = 1),lag=30) ;pacf(diff(train_men1,lag = 1),lag=30)
+
+```
+
+```{r}
+plot(diff(train_men1,lag=2),type="l");  acf(diff(train_men1,lag = 2),lag=30); pacf(diff(train_men1,lag = 2),lag=30)
+```
+```{r}
+ndiffs(sales_men)
+#1
+ndiffs(sales_women)
+#1
+ndiffs(sales_other)
+#1
+```
+# Modelling the time series using simple moving averages
+# Time series Men has trend
+# Modelling the time series behaviour by simple moving averages
+
+```{r}
+fitsma <- SMA(sales_men,n=1)
+# predsma <- forecast(fitsma,h=4)
+predsma <- forecast(fitsma[!is.na(fitsma)],h=4)
+plot(predsma)
+```
+# Define the metric MAPE
+```{r}
+smaTrainMape <- regr.eval(sales_men[2:length(sales_men)],fitsma[2:length(sales_men)])
+smaTestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,predsma$mean)
+smaTrainMape
+smaTestMape
+```
+Exponential Moving Averages
+```{r}
+fitEma <- EMA(sales_men, n = 2)
+# predema <- forecast(fitEma,h=4)
+predema <- forecast(fitEma[!is.na(fitEma)],h=4)
+plot(predema)
+```
+# Define the metric MAPE
+```{r}
+emaTrainMape <- regr.eval(sales_men[2:length(sales_men)],fitEma[2:length(sales_men)])
+emaTestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,predema$mean)
+# smaMape <- mean(abs((Price[2:length(Price)]-fitsma[2:length(Price)])/Price[2:length(Price)]))
+emaTrainMape
+
+```
+```{r}
+emaTestMape
+```
+# Build a HoltWinters model with trend
+```{r}
+holtpriceforecast <- HoltWinters(sales_men,gamma=FALSE)
+head(holtpriceforecast$fitted)
+```
+# HoltWinters model with trend and Seasonality
+```{r}
+priceholtforecast <-
+HoltWinters(sales_men, beta=TRUE, gamma=TRUE, seasonal="additive")
+head(priceholtforecast$fitted)
+```
+# Prediction on the Train
+```{r}
+holtforecastTrain <- data.frame(priceholtforecast$fitted)
+holtforecastTrainpredictions <- holtforecastTrain$xhat
+head(holtforecastTrainpredictions)
+```
+# Prediction on Validation data
+```{r}
+holtpriceforecast<-  forecast(priceholtforecast,h = 4)
+plot(holtpriceforecast,ylim = c(-20,20))
+
+```
+# Define the metric hw
+```{r}
+hwTestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,holtpriceforecast$mean)
+hwTestMape
+```
+# Arima Models
+```{r}
+model1 <- arima(sales_men,c(0,0,0))
+model1
+```
+```{r}
+acf(sales_men) 
+```
+```{r}
+pacf(sales_men)
+```
+
+```{r}
+plot(sales_men)
+```
+# Considering the difference from the graph as d=1 to stationarize
+```{r}
+model2 <- arima(sales_men,c(0,1,0))
+model2
+```
+
+```{r}
+acf(diff(sales_men,lag = 1))
+```
+
+```{r}
+pacf(diff(sales_men,lag = 1))
+```
+
+```{r}
+plot(diff(sales_men))
+```
+
+```{r}
+model3 <- arima(sales_men,c(0,2,0))
+model3
+```
+
+```{r}
+plot(diff(sales_men,differences = 2))
+```
+
+```{r}
+acf(diff(sales_men,differences = 2))
+```
+
+```{r}
+pacf(diff(sales_men,differences = 2))
+```
+
+```{r}
+model4 <- arima(sales_men,c(1,1,1))
+model4
+```
+# Plots of the models
+```{r}
+par(mfrow=c(2,2))
+plot(model1$residuals,ylim=c(-50,50))
+plot(model2$residuals,ylim=c(-50,50))
+```
+
+```{r}
+plot(model3$residuals,ylim=c(-50,50))
+plot(model4$residuals,ylim=c(-50,50))
+```
+# Auto Arima
+```{r}
+MODEL_ARIMA <- auto.arima(sales_men, ic='aic')
+summary(MODEL_ARIMA)
+```
+# Forecast on the models
+```{r}
+pricearimaforecasts1 <- forecast(model1, h=4)
+plot(pricearimaforecasts1)
+```
+# Define the metric ARIMA
+```{r}
+model1<- arima(sales_men,c(0,0,0))
+pricearimaforecast1 <- forecast(model1, h=4)
+arimaModel1TestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,pricearimaforecast1$mean)
+arimaModel1TestMape
+
+```
+```{r}
+modelm1<- arima(sales_men1,c(0,0,0))
+pricearimaforecastm1 <- forecast(modelm1, h=4)
+arimaModel1TestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,pricearimaforecastm1$mean)
+arimaModel1TestMape
+```
+
+```{r}
+model2<- arima(sales_men,c(0,1,0))
+pricearimaforecast2 <- forecast(model2, h=4)
+arimaModel2TestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,pricearimaforecast2$mean)
+arimaModel2TestMape
+```
+
+```{r}
+model3<- arima(sales_men,c(0,2,0))
+pricearimaforecast3 <- forecast(model3, h=4)
+arimaModel3TestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,pricearimaforecast3$mean)
+arimaModel3TestMape
+
+```
+```{r}
+model1_w<- arima(sales_women,c(0,0,0))
+pricearimaforecast1 <- forecast(model1_w, h=4)
+arimaModel1TestMape <- regr.eval(ValWomen$`Sales(In ThousandDollars)`,pricearimaforecast1$mean)
+arimaModel1TestMape
+
+```
+
+# Define the metric AUTO ARIMA
+```{r}
+autoarimaTestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,pricearimaforecasts_autArima$mean)
+autoarimaTestMape
+
+```
+# Forecast on new year
+```{r}
+MODEL_ARIMA_Men <- auto.arima(sales_men1, ic='aic')
+pricearimaforecasts_autArima_Men<- forecast(MODEL_ARIMA_Men,h=12)
+df_men<-data.frame(pricearimaforecasts_autArima_Men)
+
+MODEL_ARIMA_Women <- auto.arima(sales_women, ic='aic')
+pricearimaforecasts_autArima_Women<- forecast(MODEL_ARIMA_Women,h=12)
+df_women<-data.frame(pricearimaforecasts_autArima_Women)
+
+MODEL_ARIMA_other <- auto.arima(sales_other, ic='aic')
+pricearimaforecasts_autArima_other<- forecast(MODEL_ARIMA_other,h=12)
+df_other<-data.frame(pricearimaforecasts_autArima_other)
+
+rm(df1)
+test_upload <- rbind(df_men$Point.Forecast,df_women$Point.Forecast,df_other$Point.Forecast)
+
+# Result is MAPE 0.126, 79.42%
+```
+
+```{r}
+
+TrainMen <- train_men[1:(nrow(train_men) - 4),]
+ValMen <- train_men1[(nrow(train_men1) - 3):nrow(train_men1),]
+
+MODEL_ARIMA <- auto.arima(sales_men1, ic='aic')
+pricearimaforecasts_autArima_Men1<- forecast(MODEL_ARIMA,h=4)
+autoarimaTestMape <- regr.eval(ValMen$`Sales(In ThousandDollars)`,pricearimaforecasts_autArima_Men1$mean)
+autoarimaTestMape
+```
+
+
+```{r}
+
+model3 <- arima(sales_men,c(0,2,0))
+pricearimaforecasts_arima_men<- forecast(model3,h=12)
+df_men<-data.frame(pricearimaforecasts_arima_men)
+df_men$Point.Forecast
+
+model3_women <- arima(sales_women,c(0,2,0))
+pricearimaforecasts_arima_women<- forecast(model3_women,h=12)
+df_women<-data.frame(pricearimaforecasts_arima_women)
+df_women$Point.Forecast
+
+model3_other <- arima(sales_other,c(0,2,0))
+pricearimaforecasts_arima_other<- forecast(model3_other,h=12)
+df_other<-data.frame(pricearimaforecasts_arima_other)
+df_other$Point.Forecast
+
+test_upload3 <- cbind(df_women$Point.Forecast,df_men$Point.Forecast,df_other$Point.Forecast)
+
+# Score: 3.96% on test
+```
+
+```{r}
+#model3 <- arima(sales_men,c(0,2,0))
+model1 <- arima(sales_men,c(0,0,0))
+pricearimaforecasts_arima_men<- forecast(model1,h=12)
+df_men<-data.frame(pricearimaforecasts_arima_men)
+df_men$Point.Forecast
+
+model1_women <- arima(sales_women,c(0,2,0))
+pricearimaforecasts_arima_women<- forecast(model1_women,h=12)
+df_women<-data.frame(pricearimaforecasts_arima_women)
+df_women$Point.Forecast
+
+model1_other <- arima(sales_other,c(0,2,0))
+pricearimaforecasts_arima_other<- forecast(model1_other,h=12)
+df_other<-data.frame(pricearimaforecasts_arima_other)
+df_other$Point.Forecast
+
+test_upload3 <- cbind(df_women$Point.Forecast,df_men$Point.Forecast,df_other$Point.Forecast)
+
+```
+
+```{r}
+install.packages('rnn')
+library(rnn)
+```
+
+

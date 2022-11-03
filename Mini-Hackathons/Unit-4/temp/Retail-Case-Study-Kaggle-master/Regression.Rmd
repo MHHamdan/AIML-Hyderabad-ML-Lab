@@ -1,0 +1,591 @@
+---
+title: "Jayanth Rasamsetti"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+# Chapter for R scripts
+```{r}
+#1 Load the required libraries
+#2 Set the working directory
+#3 Read train, sample, economic, holiday and weather data
+#4 Get the structure and summary of each dataset
+#5 Missing Values
+#*6 Feature Engineering - Create a new holiday & Event column
+#7 Correlation plots
+#8 Impute the missing values
+#9 Standardizing train and validation data sets
+#10 Split data into train, val
+```
+#1 Load the required libraries
+```{r}
+library(data.table)
+library(caret)
+library(DMwR)
+library(zoo)
+library(forecast)
+library(lubridate)
+library(DataCombine)
+library(imputeTS)
+library(plyr)
+library(dplyr)
+library(TTR)
+library(graphics)
+library(Quandl)
+library(readxl)
+```
+#2 Set the working directory
+```{r}
+rm(list = ls(all=TRUE))
+gc()
+path = "/Users/Apple/Desktop/PhD"
+setwd(path)
+getwd()
+```
+#3 Read train and sample_submission data
+```{r}
+train <- fread("Train.csv") # 252 obs of 4 variables
+weather<-read_excel("WeatherData.xlsx")
+sample_submission<-fread("women_template.csv")
+```
+#4 Retreieve only women records
+```{r}
+train$ProductCategory <- as.factor(train$ProductCategory)
+women <- train[train$ProductCategory=="WomenClothing",]
+```
+#5 Get the structure and summary of each dataset
+```{r}
+summary(women)
+summary(holiday)
+summary(economic)
+summary(weather)
+```
+#6 Missing Values
+```{r}
+sum(is.na(women))
+# There are 4 missing values in women
+sum(is.na(weather))
+# There are 225 missing values in weather
+sum(is.na(economic))
+# 0 missing values
+sum(is.na(holiday))
+# 0 missing values
+
+# Impute the missing values in women using mean
+
+womenApril <- women[which(women$Month == 4 & !is.na(women$`Sales(In ThousandDollars)`)), "Sales(In ThousandDollars)"]
+womenAprilMean <- round(mean(womenApril$`Sales(In ThousandDollars)`))
+
+womenSept <- women[which(women$Month == 9 & !is.na(women$`Sales(In ThousandDollars)`)), "Sales(In ThousandDollars)"]
+womenSeptMean <- round(mean(womenSept$`Sales(In ThousandDollars)`))
+
+womenOct <- women[which(women$Month == 10 & !is.na(women$`Sales(In ThousandDollars)`)), "Sales(In ThousandDollars)"]
+womenOctMean <- round(mean(womenOct$`Sales(In ThousandDollars)`))
+
+women[which(is.na(women$`Sales(In ThousandDollars)`) & women$Month == 4),"Sales(In ThousandDollars)"] <- womenAprilMean
+women[which(is.na(women$`Sales(In ThousandDollars)`) & women$Month == 9),"Sales(In ThousandDollars)"] <- womenSeptMean
+women[which(is.na(women$`Sales(In ThousandDollars)`) & women$Month == 10),"Sales(In ThousandDollars)"] <- womenOctMean
+
+```
+#7 Working with holiday 
+```{r}
+#### Holiday Data
+
+# Read holiday
+holiday<-read_excel("Events_HolidaysData.xlsx")
+# Extract a new month columns
+library(lubridate)
+holiday$Month <- month(holiday$MonthDate)
+
+summary(holiday$DayCategory)
+#Event Federal Holiday 
+#  62              88 
+summary(holiday$Event)
+
+## Dummy for DayCategory
+holiday$DayCategory <- as.character(holiday$DayCategory)
+holiday$event<-ifelse(holiday$DayCategory == "Event", 1, 0)
+holiday$federal <- ifelse(holiday$DayCategory == "Federal Holiday", 1, 0)
+holiday <- holiday[,!(names(holiday) %in% c("DayCategory"))]
+
+# Convert to dummies all Events
+hol <- as.data.frame(model.matrix(~ Event - 1, data = holiday))
+holiday<-cbind(holiday[-3], hol)
+
+# Rename the holiday columns for ease
+names(holiday) <- c("Year", "MonthDate", "Month", "event", "federal",  "ChristmasObs", "IndependenceObs", "NewYearObs", "Christmas", "ChristmasEve", "Columbus", "AfterChristmas", "Easter", "Election", "Father", "Halloween", "Independence", "Labor", "MLK", "Memorial", "Mother", "NewYear", "NewYearEve", "Presidents", "Thanksgiving", "TJ", "Valentine", "Veterans")
+
+# Aggregating the holidays year and month wise
+library(dplyr)
+
+holidayAgg <- holiday %>% group_by(Year, Month) %>% summarise(events = sum(event), federals = sum(federal), ChristmasObs = sum(ChristmasObs), IndependenceObs = sum(IndependenceObs), NewYearObs = sum(NewYearObs), Christmas = sum(Christmas), ChristmasEve = sum(ChristmasEve), Columbus = sum(Columbus), AfterChristmas = sum(AfterChristmas), Easter = sum(Easter), Election = sum(Election), Father = sum(Father), Halloween = sum(Halloween), Independence = sum(Independence), Labor = sum(Labor), MLK = sum(MLK), Memorial = sum(Memorial), Mother = sum(Mother), NewYear = sum(NewYear), NewYearEve = sum(NewYearEve), Presidents = sum(Presidents), Thanksgiving = sum(Thanksgiving), TJ = sum(TJ), Valentine = sum(Valentine), Veterans = sum(Veterans))
+names(holidayAgg)
+
+##Combining duplicate events and holidays
+holidayAgg$Christmas <- holidayAgg$Christmas + holidayAgg$ChristmasEve + holidayAgg$ChristmasObs + holidayAgg$AfterChristmas
+holidayAgg <- holidayAgg[, c(setdiff(names(holidayAgg), c("ChristmasEve", "ChristmasObs", "AfterChristmas")))]
+holidayAgg$Independence <- holidayAgg$Independence + holidayAgg$IndependenceObs
+holidayAgg <- holidayAgg[, c(setdiff(names(holidayAgg), c("IndependenceObs")))]
+holidayAgg$NewYear <- holidayAgg$NewYear + holidayAgg$NewYearEve + holidayAgg$NewYearObs
+holidayAgg <- holidayAgg[, c(setdiff(names(holidayAgg), c("NewYearObs", "NewYearEve")))]
+
+# Creating field holiday which gives number of holidays in that month
+holidayAgg$holidays <- holidayAgg$events + holidayAgg$federals
+
+summary(holidayAgg)
+holidayAgg2 <- holidayAgg2[,-c("")]
+holidayAgg <- as.factor(holidayAgg)
+
+# Plot a simple histogram for the holidays (later useful for imputation) 
+library(ggplot2)
+ggp <- ggplot(data.frame(holidayAgg),aes(x=Month))
+# counts
+ggp + geom_histogram(fill="lightgreen")
+# proportion
+ggp + geom_histogram(fill="lightblue",aes(y=..count../sum(..count..)))
+
+```
+
+
+#8 Working with Macroeconomic data
+```{r}
+###### Macro Economic Data
+
+##Split Year-Month column in economic inorder to join with sales data
+economic<-read_excel("MacroEconomicData.xlsx")
+
+economic$`Year-Month` <- as.character(economic$`Year-Month`)
+#Retreive only the year
+economic$Year <- as.numeric(substring(economic$`Year-Month`, 1,4))
+#Retreive only the month
+economic$Month <- substring(economic$`Year-Month`, 8,10)
+
+# Convert the character month into numbers
+economic$Month<-ifelse(economic$Month == 'Jan', '1',
+                       ifelse(economic$Month == 'Feb', '2',
+                            ifelse(economic$Month == 'Mar', '3',
+                                   ifelse(economic$Month == 'Apr', '4',
+                                          ifelse(economic$Month == 'May', '5',
+                                                 ifelse(economic$Month == 'Jun', '6',
+                                                        ifelse(economic$Month == 'Jul', '7',
+                                                               ifelse(economic$Month == 'Aug', '8',
+                                                                      ifelse(economic$Month == 'Sep', '9',
+                                                                             ifelse(economic$Month == 'Oct','10',
+                                                                                    ifelse(economic$Month == 'Nov','11','12')))))))))))
+economic$Month <- as.numeric(economic$Month)
+## EDA for Macro economic data
+
+economic$PartyInPower<-NULL
+economic$`AdvertisingExpenses (in Thousand Dollars)`<- NULL
+economic$Year.Month<-NULL
+economic$Year<- NULL
+economic$Month<- NULL
+preproc<-preProcess(economic, method = c("center", "scale"))
+economic_Std<-predict(preproc, economic)
+
+boxplot(economic_Std, col = c("blue"))
+preproc<-preProcess(weather_final[,-c("Year", "Month")], method = c("center", "scale"))
+weather_finalStd<-predict(preproc, weather_final)
+
+```
+
+```{r}
+boxplot(economic_Std[,8:15], col = c("green"))
+```
+
+#9 Working with weather data
+```{r}
+
+# Wrote the following scripts in python for processing weather, standardise and aggregate
+
+### Beginning of python scripts
+# weather_2009 = pd.read_csv("WeatherData2009.csv")
+# weather_2010 = pd.read_csv("WeatherData2010.csv")
+# weather_2011 = pd.read_csv("WeatherData2011.csv")
+# weather_2012 = pd.read_csv("WeatherData2012.csv")
+# weather_2013 = pd.read_csv("WeatherData2013.csv")
+# weather_2014 = pd.read_csv("WeatherData2014.csv")
+# weather_2015 = pd.read_csv("WeatherData2015.csv")
+# weather_2016 = pd.read_csv("WeatherData2016.csv")
+
+# # Process weather
+# def process_weather(df):
+#     # Rename columns for ease
+#     df.columns = ['year', 'month','day','temp_high','temp_avg','temp_low','dew_point_high','dew_point_avg',
+#                   'dew_point_low','humidity_high','humidity_avg','humidity_low','pressure_high','pressure_avg','pressure_low',
+#                  'visibility_high','visibility_avg','visibility_low','wind_low','wind_avg','wind_high','precip_sum','weatherevent']
+#     # Convert year and day into strings
+#     df[['year', 'day','month','precip_sum','weatherevent']] = df[['year', 'day','month','precip_sum','weatherevent']].astype(str)
+#     
+#     # Convert all other columns to numerics
+#     df[['temp_high','temp_avg','temp_low','dew_point_high','dew_point_avg',
+#                   'dew_point_low','humidity_high','humidity_avg','humidity_low','pressure_high','pressure_avg','pressure_low',
+#                  'visibility_high','visibility_avg','visibility_low','wind_low','wind_avg','wind_high']] = df[['temp_high','temp_avg','temp_low','dew_point_high','dew_point_avg',
+#                   'dew_point_low','humidity_high','humidity_avg','humidity_low','pressure_high','pressure_avg','pressure_low',
+#                  'visibility_high','visibility_avg','visibility_low','wind_low','wind_avg','wind_high']].apply(pd.to_numeric, errors = "coerce")
+#     
+#     # Fill missing values with median of that column # Try mode/mean
+#     df = df.fillna(df.median())
+# 
+#     # Scaled all the numerical attributes using range method (simple custom function below)
+#     df_num = df.select_dtypes(include=[np.number]) # Only include numeric columns
+#     df_norm = (df_num - df_num.mean()) / (df_num.max() - df_num.min()) # Scale the numeric col
+#     df[df_norm.columns] = df_norm # Add them back to the original dataframe
+#     return df
+
+# def aggregate_weather(df):
+#     #Convert year to int
+#     df['year'] = df['year'].astype(int)
+#     # Group by month all the weather attributes
+#     df_aggregate_weather = df.groupby('month').mean() 
+#     
+#     #Insert the month columns
+#     month = ["4", "8", "12", "2", "1","7", "6", "3", "5", "11", "10", "9"] 
+#     df_aggregate_weather.insert(loc=0, column='month', value=month)
+#     
+#     # Convert year back for str
+#     df_aggregate_weather['year'] = df_aggregate_weather['year'].astype(str)
+#     
+#     # Insert a new column 'year-month' that would be useful for future join
+#     df_aggregate_weather['year-month'] = df_aggregate_weather.year.str[:4] + "-" + df_aggregate_weather.month.str[:2]
+#     
+#     # Convert month back to int
+#     df_aggregate_weather['month'] = df_aggregate_weather['month'].astype(int)
+#     return df_aggregate_weather
+# 
+# df1 = aggregate_weather(process_weather(weather_2009)) # 12 rows 21 columns
+# df2 = aggregate_weather(process_weather(weather_2010)) # 12 rows 21 columns
+# df3 = aggregate_weather(process_weather(weather_2011)) # 12 rows 21 columns
+# df4 = aggregate_weather(process_weather(weather_2012)) # 12 rows 21 columns
+# df5 = aggregate_weather(process_weather(weather_2013)) # 12 rows 21 columns
+# df6 = aggregate_weather(process_weather(weather_2014)) # 12 rows 21 columns
+# df7 = aggregate_weather(process_weather(weather_2015)) # 12 rows 21 columns
+# df8 = aggregate_weather(process_weather(weather_2016)) # 12 ros 21 columns
+
+# df_new = pd.concat([df1, df2, df3, df4, df5, df6, df7, df8])
+# df_new
+### End of python scripts
+
+weather_final <- fread("weather_processed.csv") # 96 rows 22 cols
+#Rename certain cols 
+names(weather_final)[names(weather_final) == 'month'] <- 'Month'
+names(weather_final)[names(weather_final) == 'year'] <- 'Year'
+weather_final$Month<-NULL
+weather_final$`year-month`<-NULL
+
+boxplot(weather_finalStd[,-c("Year", "Month")], col = c("blue"))
+preproc<-preProcess(weather_final[,-c("Year", "Month")], method = c("center", "scale"))
+weather_finalStd<-predict(preproc, weather_final)
+
+# Weather is completed
+```
+
+```{r}
+boxplot(weather_finalStd$humidity_low, col = c("blue"))
+```
+
+
+#10 Merging datasets before model building
+```{r}
+##Merging women_sales and Economic data on Year and Month
+merge1 <- merge(x = women, y = economic, by = c("Year", "Month"), all=TRUE)
+
+## Merge Economic & Holiday data on Year and Month and retain all rows
+merge2 <- merge(x = merge1, y = holidayAgg, by = c("Year", "Month"), all = TRUE)
+
+## Drop unnecessary columns
+merge2$`Year-Month`<- NULL
+merge2$PartyInPower<- NULL
+merge2$`AdvertisingExpenses (in Thousand Dollars)`<- NULL
+merge2$ProductCategory<-NULL
+merge2 <- merge2[1:84,]
+
+##Assign 0's for NAs in holidays
+##Checking for NA
+merge2[which(is.na(merge2$holidays)), c("Year", "Month", "events", "federals", "holidays")]
+
+##Since here NA means there are no holidays assigning Zeros to NAs for holiday data
+merge2[which(is.na(merge2$holidays)), c("events", "federals", "holidays", "Christmas", "Columbus",  "Easter", "Election", "Father", "Halloween", "Independence", "Labor", "MLK", "Memorial", "Mother",  "NewYear", "Presidents",  "Thanksgiving", "TJ", "Valentine", "Veterans")] <- 0
+sum(is.na(merge2)) #No more NAs in relevant columns
+names(merge2)[names(merge2) == 'Sales(In ThousandDollars)'] <- 'target'
+
+# Merge2 contains holiday and economics with train data (84 rows)
+
+## Merge Weather & previous data on Year and Month and retain all rows
+merge3 <- merge(x = merge2, y = weather_final, by = c("Year", "Month"), all = TRUE)
+merge3$`year-month`<- NULL
+sum(is.na(merge3))
+```
+
+#11 Split data into train, val
+```{r}
+train <- merge2[1:84, ]
+# train <- merge2[1:72, ]
+val <- merge2[73:84, ]
+test <- merge2[85:96, ]
+
+train <- merge3[1:84, ]
+# train <- merge2[1:72, ]
+val <- merge3[73:84, ]
+test <- merge3[85:96, ]
+```
+
+#12 Standardizing train, val, test
+```{r}
+library(caret)
+preproc<-preProcess(train[,-c("target","Month","Year")], method = c("center", "scale"))
+trainStd<-predict(preproc, train)
+valStd<-predict(preproc, val)
+testStd<-predict(preproc, test)
+
+trainStd<-data.frame(trainStd)
+valStd<-data.frame(valStd)
+testStd<-data.frame(testStd)
+```
+
+#13 Linear Regression
+```{r}
+linear <- lm(formula = target ~ ., data = trainStd)
+summary(linear)
+
+# StepAIC
+library(MASS)
+linearAic<-stepAIC(linear, direction = "both")
+summary(linearAic)
+
+#Applying VIF to remove residual collinearity
+library(car)
+linearVif<-vif(linearAic)
+linearVif
+# #Removing high collinear features
+# linear2 <- lm(formula = target ~ unemployment.rate + CommercialBankInterestRateonCreditCardPlans + 
+#                 Finance.Rate.on.Personal.Loans.at.Commercial.Banks..24.Month.Loan + 
+#                 Cotton.Monthly.Price...US.cents.per.Pound.lbs. + Change.in.. + 
+#                 Average.upland.planted.million.acres. + Mill.use...in..480.lb.netweright.in.million.bales. + 
+#                 Exports + events + federals + Columbus + Easter + 
+#                 Election + Father + Independence + MLK + Mother + NewYear + 
+#                 Month, data = trainStd)
+# linear2Aic <- stepAIC(linear2, direction = "both")
+# summary(linear2Aic)
+# vif(linear2Aic)
+
+##Validating Linear Regression
+library(DMwR)
+valPreds <- predict(linearAic, newdata = valStd)
+regr.eval(trues = valStd$target, preds = valPreds)
+
+testPreds <- data.frame(predict(linearAic, newdata = testStd))
+
+```
+#14 Random Forest
+```{r}
+library(randomForest)
+rf<-randomForest(target~., trainStd)
+print(importance(rf))
+print(varImpPlot(rf))
+
+valpred_rf<-predict(rf, valStd)
+regr.eval(trues = valStd$target, preds = valpred_rf)
+testPredsRf <- data.frame(predict(rf, newdata = testStd))
+```
+#15 Decision Tree
+```{r}
+library(rpart)
+dt<-rpart(target~., trainStd)
+valpred_dt<-predict(dt, valStd)
+regr.eval(trues = valStd$target, preds = valpred_dt)
+preds_dt <- data.frame(predict(dt, testStd))
+```
+#16 Xgboost
+```{r}
+library(xgboost) 
+trainStdh2o <- trainStd
+testStdh2o <- testStd
+feature_names <- names(trainStdh2o)[1:ncol(trainStdh2o)-1]
+
+dtrain = xgb.DMatrix(data = as.matrix(trainStdh2o[,-c("target")]),
+                                      label=trainStdh2o$target)
+
+model = xgboost(data = dtrain, max.depth = 5, booster = "gbtree",
+                eta = 0.3, nthread = 2, nround = 10, 
+                objective = "reg:linear", verbose = 1)
+#best result is for nround= 10, max.depth =5, eta=0.3 or 1
+
+pred_xgb <- data.frame(predict(model, as.matrix(testStdh2o)))
+
+cv.ctrl <- trainControl(method = "repeatedcv", repeats = 1,number = 3)
+xgb.grid <- expand.grid(nrounds = 500,
+                        max_depth = seq(6,10),
+                        eta = c(0.01,0.3, 1),
+                        gamma = c(0.0, 0.2, 1),
+                        colsample_bytree = c(0.5,0.8, 1),
+                        min_child_weight=seq(1,10)
+)
+
+xgb_tune <-train(target ~.,
+                 data=trainStd,
+                 method="xgbTree",
+                 metric = "RMSE",
+                 trControl=cv.ctrl,
+                 tuneGrid=xgb.grid
+)
+
+importance <- xgb.importance(feature_names = feature_names, model = model)
+df2<-data.frame(importance)
+print(df2)
+```
+
+#17 PCA
+```{r}
+# Create a data frame only for PCA
+trainStdpca <-trainStd[,-c("Month", "Year", "target")]
+testStdpca <-testStd[,-c("Month", "Year", "target")]
+pca <- princomp(trainStdpca)
+summary(pca)
+## #Selecting first 10 components with 80% of variance, and first 13 90% of variance, first 20 99% variance
+
+## Apply PCA on Features (skip Month and Year)
+trainStdPCA <- as.data.frame(predict(pca, trainStdpca))[1:20]# [1:26] with weather
+testStdPCA <- as.data.frame(predict(pca, testStdpca))[1:20] #[1:26] with weather
+
+##Applying Arima with External Regressors
+##Converting traindata to Timeseries
+trainTS <- ts(data = trainStd$target, frequency = 12, start = c(2009, 01))
+
+##Fitting Arima model with parameters derived from Auto Arima on Timeseries
+arima <- Arima(trainTS, order = c(0,1,1), seasonal = c(0,1,1), xreg = trainStdPCA)
+summary(arima)
+
+arimaForecast <- data.frame(forecast(arima, h = 12, xreg = testStdPCA))
+write.csv(autoArimaForecast, file = "D:/Insofe Labs/PHD2/arimaX.csv")
+
+# Best result is for the low 80% confidence
+#Your answer passed the tests! Your score is 118.96%
+#Your MAPE is 8.406216%
+
+#For low 95%
+#Your answer passed the tests! Your score is 117.49%
+#Your MAPE is 8.511466%
+
+# Even after merging weather it isn't improving mape by that much
+```
+
+#18 H2O
+```{r}
+library(h2o)
+
+h2o.init(ip='localhost', port = 54321, max_mem_size = '1g',nthreads = 1)
+testStd$`Sales(In ThousandDollars)`<-NULL
+write.csv(x = trainStd, file = "lasttrain.csv", sep = ",", row.names = FALSE)
+write.csv(x = testStd, file = "lasttest.csv", sep = ",", row.names = FALSE)
+
+train.hex <- as.h2o(trainStdh2o, destination_frame = "train.hex")
+test.hex <- as.h2o(testStdh2o, destination_frame = "test.hex")
+
+# Extract important features from autoencoder
+aec <- h2o.deeplearning(x = setdiff(colnames(train.hex), "target"), 
+                        # y = "V21",
+                        training_frame = train.hex,
+                        autoencoder = T, activation = "RectifierWithDropout", 
+                        hidden = c(30), # Best result is for Layer = 150
+                        epochs = 100, l1 = 0.01)
+
+# Extract features from train data
+features_train <- as.data.frame(h2o.deepfeatures(aec,train.hex[,-17],layer = 1))
+# Extract features from test data
+features_test <- as.data.frame(h2o.deepfeatures(aec,test.hex,layer = 1))
+
+# add extracted features with original data to train the model
+train <- data.frame(trainStdh2o,features_train)
+test <- data.frame(testStdh2o,features_test)
+#DeepLearning Model Implementation
+model = h2o.deeplearning(x = setdiff(colnames(train.hex), "target"), 
+                         y = "target",
+                         training_frame = train.hex, 
+                         # activation =  "Tanh", 
+                         hidden = c(10, 10, 10),
+                         activation = "RectifierWithDropout",
+                         input_dropout_ratio = 0.4, #Best results for Dropout = 0.4
+                         epochs = 100,seed=123)
+
+prediction = h2o.predict(model, newdata = test.hex)
+pred = as.data.frame(prediction)
+h2o.shutdown(F)
+
+# Another good result is 103.9% score for the above dropout, etc
+```
+
+<!-- #Adding weather important columns -->
+<!-- ```{r} -->
+<!-- weather_names<-names(weather) -->
+<!-- aggregate(weather_names,by=list(weather$Month),FUN=average) -->
+<!-- weather$season<- -->
+<!-- ``` -->
+<!-- #7 Merging the various data sets -->
+<!-- ```{r} -->
+<!-- # Merge train_women1 and economic datasets based on month -->
+<!-- train_women2 <-fread("train_women2.csv") -->
+<!-- women_eco_merge <- merge(train_women2,economic,by=c("Year-Month"),all=TRUE) -->
+<!-- summary(women_eco_merge) -->
+<!-- women_eco_merge$ProductCategory<-as.factor(women_eco_merge$ProductCategory) -->
+<!-- women_eco_merge$ProductCategory<-NULL -->
+<!-- women_eco_merge$PartyInPower<-NULL -->
+<!-- ``` -->
+
+<!-- #7 Correlation plots -->
+<!-- ```{r} -->
+<!-- summary(economic) -->
+<!-- economic$`AdvertisingExpenses (in Thousand Dollars)`<-as.numeric(economic$`AdvertisingExpenses (in Thousand Dollars)`) -->
+<!-- sum(is.na(economic)) -->
+<!-- # 85 missing values in advertising expenses -->
+
+<!-- library(corrplot) -->
+<!-- corrplot(economic) -->
+<!-- features <- c(4:11,13:20) -->
+<!-- corrplot(women_eco_merge["Cotton Monthly","Monthly"]) -->
+<!-- corrplot(cor(economic["`unemployment rate`", "CPI"])) -->
+<!-- df2 = women_eco_merge[,-c("Year-Month", -->
+<!--                           "Year", -->
+<!--                           "Month")] -->
+<!-- corrplot(cor(df2), method="shade",shade.col=NA, tl.col="black", tl.srt=45) -->
+<!-- corrplot(type="lower", method="circle", diag=FALSE) -->
+<!-- corrplot(cor(df2), method = "number") -->
+
+<!-- rm(train_women2) -->
+<!-- ``` -->
+<!-- #8 Impute the missing values -->
+<!-- ```{r} -->
+<!-- summary(women_eco_merge) -->
+<!-- women_eco_merge$`AdvertisingExpenses (in Thousand Dollars)`<-NULL -->
+
+<!-- target <- women_eco_merge$`Sales(In ThousandDollars)`[1:84] -->
+<!-- train_data<-women_eco_hol_season_merge[1:84,-c("Year-Month","Sales(In ThousandDollars)")] -->
+<!-- test_data<-women_eco_hol_season_merge[85:96,-c("Year-Month")] -->
+
+<!-- train_data<-women_eco_merge_hol[1:84,-c("Year-Month","Sales(In ThousandDollars)")] -->
+<!-- test_data<-women_eco_merge_hol[85:96,-c("Year-Month")] -->
+<!-- test_data$`Sales(In ThousandDollars)`<-NULL -->
+<!-- ``` -->
+
+```{r}
+# summary(holiday2$`Year-Month`)
+# women_eco_hol_merge<-merge(women_eco_merge,holiday2,by=c("Year-Month"), all =TRUE)
+# d<-women_eco_hol_merge
+# sum(is.na(women_eco_hol_merge$DayCategory))
+# d[is.na(d$DayCategory)] <-0 
+# write.csv(x = women_eco_merge, file = "women_eco_merge.csv", sep = ",", row.names = FALSE)
+# women_eco_hol_season_merge <- fread("women_eco_hol_season.csv")
+# #women_eco_hol_merge$season<-ifelse(women_eco_hol_merge$Month="4" or women_eco_hol_merge$Month="10" or #women_eco_hol_merge$Month="11", "2",ifelse (Grade$OverallPct1<60 |Grade$Math1<80,"B","A"))
+
+# summary(holiday2)
+# holiday2$count2<- NULL
+# 
+# women_eco_merge$holiday<-NULL
+# names(df_holiday)[1]<-"Year-Month"
+# women_eco_merge_hol <- merge(women_eco_merge,df_holiday,by=c("Year-Month"),all=TRUE)
+# women_eco_merge_hol[, 18:43][is.na(women_eco_merge_hol[, 18:43])] <- 0
+# summary(women_eco_merge_hol)
+```
