@@ -1,0 +1,9 @@
+Voice commands based food ordering system The goal of the hackathon is to train your model on different types of voice data (such as studio data, noisy data and finally on your own team data)
+
+Stage 0 - Obtain Features from Audio samples using Pre-trained Network
+
+Stage 1   - Train a classifier on Studio data and deploy the model in the server
+
+Stage 2   - Use 'Noisy_data' and 'Studio_data' together, train a classifier on the same, and deploy the model in the server.
+
+Stage 3  - Collect your voice samples (team data) and refine the classifier trained on Studio_data and Noisy_data. Deploy the model in the server.
