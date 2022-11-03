@@ -1,0 +1,161 @@
+{
+	
+	"get_Zodiac_Sign": {
+		"intentname": "get_Zodiac_Sign",
+		"Parameters": [
+		
+			{
+				"name": "day",
+				"placeholder": "$day",
+				"required": "True",
+				"prompts": [
+					"Which day(date) were you born?","I was born on 6th july when were you born"
+				],
+				"context": ""
+			},
+				{
+				"name": "month",
+				"placeholder": "$month",
+				"required": "True",
+				"prompts": [
+					"In Which month you were born?","My birth month is July, what is yours?"
+				],
+				"context": ""
+			},
+				{
+				"name": "year",
+				"placeholder": "$year",
+				"required": "True",
+				"prompts": [
+					"What is your year of birth?","My birth year is 2020, what is yours?"
+				],
+				"context": ""
+			}
+            
+		],
+		"actions": "zodiacSign_Action()"
+	}
+
+
+		"get_Suggested_Movie": {
+		"intentname": "get_Suggested_Movie",
+		"Parameters": [
+		
+			{
+				"name": "movie",
+				"placeholder": "$movie",
+				"required": "True",
+				"prompts": [
+					"Which movie(movie) were you looking for?","I would recommend you The Patriot movie"
+				],
+				"context": ""
+			},
+				{
+				"name": "year",
+				"placeholder": "$year",
+				"required": "True",
+				"prompts": [
+					"In which year want to search for a movie?","Th best released movie was in 2019, which year you want search for?"
+				],
+				"context": ""
+			},
+				{
+				"name": "imdb",
+				"placeholder": "$imdb",
+				"required": "True",
+				"prompts": [
+					"What is the imdb you want to look for?","The good imdb rate starts from 8.5"
+				],
+				"context": ""
+			},
+				{
+				"name": "metascore",
+				"placeholder": "$metascore",
+				"required": "True",
+				"prompts": [
+					"What is the metascore you want to search for?","The good metascore starts from 85 out of 100"
+				],
+				"context": ""
+			},
+				{
+				"name": "votes",
+				"placeholder": "$votes",
+				"required": "True",
+				"prompts": [
+					"What is the votes you are looking for?","The good movie has votes of 800000"
+				],
+				"context": ""
+			},
+				{
+				"name": "n_imdb",
+				"placeholder": "$n_imdb",
+				"required": "True",
+				"prompts": [
+					"What is the n_imdb you are looking for?","The good movie has n_imdb of 85"
+				],
+				"context": ""
+			}
+            
+		],
+		"actions": "SuggestedMovie_Action()"
+	}
+
+ 
+
+		"get_Search_Book": {
+		"intentname": "get_Search_Book",
+		"Parameters": [
+		
+			{
+				"name": "Book",
+				"placeholder": "$Book",
+				"required": "True",
+				"prompts": [
+					"Which Book(Book) were you looking for?","I would recommend you The Theory of Everything book"
+				],
+				"context": ""
+			},
+				{
+				"name": "Author",
+				"placeholder": "$Author",
+				"required": "True",
+				"prompts": [
+					"What author you want search for?","My favorit author is Stephen Hawking, what is yours?"
+				],
+				"context": ""
+			},
+				{
+				"name": "Rating",
+				"placeholder": "$Rating",
+				"required": "True",
+				"prompts": [
+					"What is the rating you are targeting?","The good rate starts from 4.5"
+				],
+				"context": ""
+			},
+				{
+				"name": "Customers_Rated",
+				"placeholder": "$Customers_Rated",
+				"required": "True",
+				"prompts": [
+					"What is the Customers_Rated you are targeting?","The good number of Customers_Rated starts from 3000"
+				],
+				"context": ""
+			},
+				{
+				"name": "Price",
+				"placeholder": "$Price",
+				"required": "True",
+				"prompts": [
+					"What is the Price you are targeting?","The average price for good books starts on 100 USD"
+				],
+				"context": ""
+			}
+            
+		],
+		"actions": "SearchBook_Action()"
+	}
+
+}
+
+
