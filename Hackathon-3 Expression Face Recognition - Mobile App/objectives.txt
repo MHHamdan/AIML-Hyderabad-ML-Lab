@@ -1,0 +1,11 @@
+Objectives:
+
+Stage 1: Build a Siamese Network and obtain the Siamese Representation for the AT&T faces dataset
+
+Stage 2 : Use the same Siamese Model to test for Face Similarity on the Mobile App
+
+Stage 3 : Get the Siamese Network Representation of the Team Data and build a classifier to perform Face Recognition on the Mobile app
+
+Stage 4  : Train a CNN Model and perform Expression Recognition in the EFR Mobile App.
+
+Stage 5  : Test for Anti-Face Spoofing on the EFR Mobile App.
