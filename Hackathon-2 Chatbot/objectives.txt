@@ -1,0 +1,32 @@
+Many approaches’ chatbot just produced only one output instead of multiple outputs, the basic process flow is the same where each time an input is entered, the new search will be done. Nothing related to previous output.
+
+
+This hackathon is focused on enabling chatbot to become a search engine.
+
+ Enabling the chatbot to process the next search with the relation to the previous search output. 
+ 
+Enhancing the capability of chatbot’s input processing. 
+
+
+Alexa developer console (Alexa Conversations (beta) lets us create Alexa skills that feel more natural with fewer lines of code)
+Create a skill and provide intents as in group 15 ( Book Search & Zodiac Sign & Suggest a movie).
+Create utterances for the corresponding intent more than 50 each.
+Create slots with the slot types for each intent with different numbers.
+Create a database with all possible combinations of all attributes in csv formats. 
+Update the lambda_function.py and requirements.txt in the Code section.
+
+Python programming language 
+
+Beautiful Soup package for parsing and extracting movies and books information in csv format. 
+Create three intents for (zodiac, book and movie) in .csv format.
+Create more than 50 utterances for each (zodiac, book and movie) in .dat format.
+Create a 3 slots for zodiac intent, 5 slots book intent and 6 slots for movie intent. 
+Conﬁgure newparams.cfg ﬁle for both book and movie intents.
+Create a database for the (Zodiac, book and movie) intents of all attributes.
+
+Python programming language 
+
+Extract feature representation and Classifications for the text all the 3 intents
+Utilizing both Countvectorizer, TFIDFVectorizer and padded sequence features for the text intents representation.
+Utilizing both PyTorch, Keras and traditional machine learning classifiers for the text intents classification.
+Compare the attributes with the CSV file to get the final selection of that particular intent (Zodiac, book or movie)
